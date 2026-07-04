@@ -1,7 +1,7 @@
-import jwt, { type SignOptions } from "jsonwebtoken";
+import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
 
-const JWT_SECRET = process.env.JWT_SECRET || "fallback-secret";
+const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || "fallback-secret");
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "7d";
 
 export interface AuthPayload {
@@ -11,13 +11,16 @@ export interface AuthPayload {
 }
 
 export async function signJwt(payload: AuthPayload): Promise<string> {
-  const options: SignOptions = { expiresIn: JWT_EXPIRES_IN as SignOptions["expiresIn"] };
-  return jwt.sign(payload as object, JWT_SECRET, options);
+  return new SignJWT({ ...payload })
+    .setProtectedHeader({ alg: "HS256" })
+    .setExpirationTime(JWT_EXPIRES_IN)
+    .sign(JWT_SECRET);
 }
 
 export async function verifyJwt(token: string): Promise<AuthPayload | null> {
   try {
-    return jwt.verify(token, JWT_SECRET) as AuthPayload;
+    const { payload } = await jwtVerify(token, JWT_SECRET);
+    return payload as unknown as AuthPayload;
   } catch {
     return null;
   }
