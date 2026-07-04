@@ -1,0 +1,171 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  CUSTOMER
+  ADMIN
+}
+
+enum LoanType {
+  PERSONAL
+  HOME
+  AUTO
+  BUSINESS
+  EDUCATION
+}
+
+enum LoanStatus {
+  PENDING
+  APPROVED
+  ACTIVE
+  CLOSED
+  DEFAULTED
+  REJECTED
+}
+
+enum InstallmentStatus {
+  PENDING
+  PAID
+  OVERDUE
+  PARTIAL
+}
+
+enum PaymentMode {
+  CASH
+  BANK_TRANSFER
+  CHEQUE
+  ONLINE
+  UPI
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+model User {
+  id           String   @id @default(uuid()) @db.Uuid
+  email        String   @unique
+  passwordHash String
+  fullName     String
+  role         UserRole @default(CUSTOMER)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  customer     Customer?
+}
+
+model Customer {
+  id             String   @id @default(uuid()) @db.Uuid
+  userId         String   @unique @db.Uuid
+  user           User     @relation(fields: [userId], references: [id])
+
+  phone          String?
+  addressLine    String?
+  city           String?
+  state          String?
+  postalCode     String?
+  dateOfBirth    DateTime?
+  employmentType String?
+  monthlyIncome  Decimal? @db.Decimal(12, 2)
+  employerName   String?
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  loans          Loan[]
+  payments       Payment[]
+}
+
+model Loan {
+  id               String     @id @default(uuid()) @db.Uuid
+  loanNumber       String     @unique
+  customerId       String     @db.Uuid
+  customer         Customer   @relation(fields: [customerId], references: [id])
+
+  loanType         LoanType   @default(PERSONAL)
+  calculationMethod String    @default("REDUCING_BALANCE")
+  principalAmount  Decimal    @db.Decimal(15, 2)
+  interestRate     Decimal    @db.Decimal(5, 2)
+  tenureMonths     Int
+  emiAmount        Decimal?   @db.Decimal(15, 2)
+  totalInterest    Decimal?   @db.Decimal(15, 2)
+  totalPayable     Decimal?   @db.Decimal(15, 2)
+  disbursementDate DateTime?
+  firstEmiDate     DateTime?
+  maturityDate     DateTime?
+
+  status           LoanStatus @default(PENDING)
+  remainingBalance Decimal    @default(0) @db.Decimal(15, 2)
+  delinquentDays   Int        @default(0)
+  notes            String?
+
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+
+  installments     Installment[]
+  payments         Payment[]
+
+  @@index([customerId])
+  @@index([status])
+}
+
+model Installment {
+  id                String            @id @default(uuid()) @db.Uuid
+  loanId            String            @db.Uuid
+  loan              Loan              @relation(fields: [loanId], references: [id], onDelete: Cascade)
+
+  installmentNo     Int
+  dueDate           DateTime
+  amount            Decimal           @db.Decimal(15, 2)
+  principalPart     Decimal           @db.Decimal(15, 2)
+  interestPart      Decimal           @db.Decimal(15, 2)
+  outstandingBefore Decimal           @db.Decimal(15, 2)
+  status            InstallmentStatus @default(PENDING)
+  paidDate          DateTime?
+  lateDays          Int               @default(0)
+  lateFee           Decimal?          @default(0) @db.Decimal(10, 2)
+  paymentId         String?           @db.Uuid
+  payment           Payment?          @relation("InstallmentPayment", fields: [paymentId], references: [id])
+
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  @@unique([loanId, installmentNo])
+  @@index([loanId])
+  @@index([dueDate])
+  @@index([status])
+}
+
+model Payment {
+  id             String        @id @default(uuid()) @db.Uuid
+  customerId     String        @db.Uuid
+  customer       Customer      @relation(fields: [customerId], references: [id])
+  loanId         String        @db.Uuid
+  loan           Loan          @relation(fields: [loanId], references: [id])
+
+  amount         Decimal       @db.Decimal(15, 2)
+  paymentMode    PaymentMode   @default(CASH)
+  transactionRef String?
+  paymentDate    DateTime      @default(now())
+  status         PaymentStatus @default(PENDING)
+  notes          String?
+
+  installments   Installment[] @relation("InstallmentPayment")
+
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@index([loanId])
+  @@index([customerId])
+  @@index([paymentDate])
+}
